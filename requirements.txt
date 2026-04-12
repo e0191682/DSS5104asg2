@@ -1,0 +1,11 @@
+numpy==2.4.1
+pandas==3.0.0
+scikit-learn==1.8.0
+matplotlib==3.10.8
+seaborn==0.13.2
+datasets>=2.14.0
+fasttext
+transformers>=4.40.0
+accelerate>=0.30.0
+kagglehub>=0.3.0
+tqdm
