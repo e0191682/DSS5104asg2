@@ -3,7 +3,7 @@
 <html lang="en">
 <head><meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>dss5104asg2_wl</title><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.1.10/require.min.js"></script>
+<title>dss5104asg2_wl2</title><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.1.10/require.min.js"></script>
 <style type="text/css">
     pre { line-height: 125%; }
 td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
@@ -10852,6 +10852,343 @@ Loading weights: 100%|██████████| 197/197 [00:00&lt;00:00, 9
 
 ✅ Plot saved to results/crossover_final.png
 ✅ CSV saved to results/crossover_final.csv
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=e73ae4ea">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="cm-editor cm-s-jupyter">
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># 7: Error Analysis </span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=72946064">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [45]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="cm-editor cm-s-jupyter">
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Focus: Best &amp; Worst models per dataset | 25 examples each | Overlap analysis</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span><span class="o">,</span><span class="w"> </span><span class="nn">time</span><span class="o">,</span><span class="w"> </span><span class="nn">random</span><span class="o">,</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span><span class="o">,</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.feature_extraction.text</span><span class="w"> </span><span class="kn">import</span> <span class="n">TfidfVectorizer</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.linear_model</span><span class="w"> </span><span class="kn">import</span> <span class="n">LogisticRegression</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.svm</span><span class="w"> </span><span class="kn">import</span> <span class="n">SVC</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.metrics</span><span class="w"> </span><span class="kn">import</span> <span class="n">f1_score</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">fasttext</span><span class="o">,</span><span class="w"> </span><span class="nn">tempfile</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span><span class="o">,</span><span class="w"> </span><span class="nn">warnings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">datasets</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dataset</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">transformers</span><span class="w"> </span><span class="kn">import</span> <span class="n">AutoTokenizer</span><span class="p">,</span> <span class="n">AutoModelForSequenceClassification</span><span class="p">,</span> <span class="n">Trainer</span><span class="p">,</span> <span class="n">TrainingArguments</span>
+
+<span class="n">warnings</span><span class="o">.</span><span class="n">filterwarnings</span><span class="p">(</span><span class="s2">"ignore"</span><span class="p">)</span>
+<span class="n">torch</span><span class="o">.</span><span class="n">set_num_threads</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
+<span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="s1">'results'</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">"🔍 Error Analysis: Best vs Worst Models per Dataset"</span><span class="p">)</span>
+
+<span class="c1"># ============================================================</span>
+<span class="c1"># 0️⃣ Helper: Categorize failures using EXACT rubric phrases</span>
+<span class="c1"># ============================================================</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">categorize_failure</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">true_label</span><span class="p">,</span> <span class="n">pred_label</span><span class="p">):</span>
+    <span class="n">text_lower</span> <span class="o">=</span> <span class="n">text</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">text</span><span class="o">.</span><span class="n">split</span><span class="p">())</span> <span class="o">&lt;=</span> <span class="mi">5</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">"Short/Uninformative Text"</span>
+    <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">k</span> <span class="ow">in</span> <span class="n">text_lower</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">'🙃'</span><span class="p">,</span> <span class="s1">'🙄'</span><span class="p">,</span> <span class="s1">'😒'</span><span class="p">,</span> <span class="s1">'sarcasm'</span><span class="p">,</span> <span class="s1">'obviously'</span><span class="p">,</span> <span class="s1">'great'</span><span class="p">,</span> <span class="s1">'perfect'</span><span class="p">,</span> <span class="s1">'love it'</span><span class="p">,</span> <span class="s1">'hate it'</span><span class="p">]):</span>
+        <span class="k">return</span> <span class="s2">"Sarcasm/Implicit Meaning"</span>
+    <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">k</span> <span class="ow">in</span> <span class="n">text_lower</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">'http'</span><span class="p">,</span> <span class="s1">'www'</span><span class="p">,</span> <span class="s1">'@'</span><span class="p">,</span> <span class="s1">'#'</span><span class="p">,</span> <span class="s1">'rt:'</span><span class="p">,</span> <span class="s1">'via'</span><span class="p">,</span> <span class="s1">'t.co'</span><span class="p">,</span> <span class="s1">'click here'</span><span class="p">]):</span>
+        <span class="k">return</span> <span class="s2">"Out-of-Distribution Vocabulary"</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">text</span><span class="o">.</span><span class="n">split</span><span class="p">())</span> <span class="o">&lt;</span> <span class="mi">15</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span><span class="n">k</span> <span class="ow">in</span> <span class="n">text_lower</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">'not'</span><span class="p">,</span> <span class="s2">"n't"</span><span class="p">,</span> <span class="s1">'no '</span><span class="p">,</span> <span class="s1">'never'</span><span class="p">,</span> <span class="s1">'bad'</span><span class="p">,</span> <span class="s1">'good'</span><span class="p">]):</span>
+        <span class="k">return</span> <span class="s2">"Ambiguous Ground Truth"</span>
+    <span class="k">return</span> <span class="s2">"Label Noise / Other"</span>
+
+<span class="c1"># ============================================================</span>
+<span class="c1"># 1️⃣ Define Target Models (Based on your results)</span>
+<span class="c1"># ============================================================</span>
+<span class="c1"># 20NG: Best = TF-IDF+SVM (0.893) | Worst = DistilBERT (0.755)</span>
+<span class="c1"># TweetEval: Best = RoBERTa (0.783) | Worst = TF-IDF+SVM (0.505)</span>
+<span class="n">targets</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s1">'20NG'</span><span class="p">:</span> <span class="p">{</span><span class="s1">'best'</span><span class="p">:</span> <span class="s1">'TF-IDF+SVM'</span><span class="p">,</span> <span class="s1">'worst'</span><span class="p">:</span> <span class="s1">'DistilBERT'</span><span class="p">,</span> <span class="s1">'data'</span><span class="p">:</span> <span class="p">(</span><span class="n">news_train</span><span class="p">,</span> <span class="n">news_test</span><span class="p">),</span> <span class="s1">'labels'</span><span class="p">:</span> <span class="mi">20</span><span class="p">},</span>
+    <span class="s1">'TweetEval'</span><span class="p">:</span> <span class="p">{</span><span class="s1">'best'</span><span class="p">:</span> <span class="s1">'RoBERTa'</span><span class="p">,</span> <span class="s1">'worst'</span><span class="p">:</span> <span class="s1">'TF-IDF+SVM'</span><span class="p">,</span> <span class="s1">'data'</span><span class="p">:</span> <span class="p">(</span><span class="n">tweet_train</span><span class="p">,</span> <span class="n">tweet_test</span><span class="p">),</span> <span class="s1">'labels'</span><span class="p">:</span> <span class="mi">2</span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="n">results_data</span> <span class="o">=</span> <span class="p">{}</span>
+
+<span class="k">for</span> <span class="n">ds_name</span><span class="p">,</span> <span class="n">cfg</span> <span class="ow">in</span> <span class="n">targets</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="s2">📊 Processing </span><span class="si">{</span><span class="n">ds_name</span><span class="si">}</span><span class="s2">..."</span><span class="p">)</span>
+    <span class="n">X_tr</span><span class="p">,</span> <span class="n">y_tr</span> <span class="o">=</span> <span class="n">cfg</span><span class="p">[</span><span class="s1">'data'</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">X_te</span><span class="p">,</span> <span class="n">y_te</span> <span class="o">=</span> <span class="n">cfg</span><span class="p">[</span><span class="s1">'data'</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">n_labels</span> <span class="o">=</span> <span class="n">cfg</span><span class="p">[</span><span class="s1">'labels'</span><span class="p">]</span>
+    
+    <span class="n">model_preds</span> <span class="o">=</span> <span class="p">{}</span>
+    
+    <span class="c1"># --------------------------------------------------------</span>
+    <span class="c1"># Train Classical Models (Instant)</span>
+    <span class="c1"># --------------------------------------------------------</span>
+    <span class="k">if</span> <span class="s1">'TF-IDF'</span> <span class="ow">in</span> <span class="n">cfg</span><span class="p">[</span><span class="s1">'best'</span><span class="p">]</span> <span class="ow">or</span> <span class="s1">'TF-IDF'</span> <span class="ow">in</span> <span class="n">cfg</span><span class="p">[</span><span class="s1">'worst'</span><span class="p">]:</span>
+        <span class="n">vec</span> <span class="o">=</span> <span class="n">TfidfVectorizer</span><span class="p">(</span><span class="n">max_features</span><span class="o">=</span><span class="mi">5000</span><span class="p">,</span> <span class="n">ngram_range</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">),</span> <span class="n">sublinear_tf</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">X_tr_vec</span> <span class="o">=</span> <span class="n">vec</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">X_tr</span><span class="p">)</span>
+        <span class="n">X_te_vec</span> <span class="o">=</span> <span class="n">vec</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">X_te</span><span class="p">)</span>
+        
+        <span class="k">if</span> <span class="s1">'TF-IDF+SVM'</span> <span class="ow">in</span> <span class="p">[</span><span class="n">cfg</span><span class="p">[</span><span class="s1">'best'</span><span class="p">],</span> <span class="n">cfg</span><span class="p">[</span><span class="s1">'worst'</span><span class="p">]]:</span>
+            <span class="n">clf_svm</span> <span class="o">=</span> <span class="n">SVC</span><span class="p">(</span><span class="n">kernel</span><span class="o">=</span><span class="s1">'linear'</span><span class="p">,</span> <span class="n">C</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">probability</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span>
+            <span class="n">clf_svm</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X_tr_vec</span><span class="p">,</span> <span class="n">y_tr</span><span class="p">)</span>
+            <span class="n">model_preds</span><span class="p">[</span><span class="s1">'TF-IDF+SVM'</span><span class="p">]</span> <span class="o">=</span> <span class="n">clf_svm</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">X_te_vec</span><span class="p">)</span>
+            
+        <span class="k">if</span> <span class="s1">'TF-IDF+LR'</span> <span class="ow">in</span> <span class="p">[</span><span class="n">cfg</span><span class="p">[</span><span class="s1">'best'</span><span class="p">],</span> <span class="n">cfg</span><span class="p">[</span><span class="s1">'worst'</span><span class="p">]]:</span>
+            <span class="n">clf_lr</span> <span class="o">=</span> <span class="n">LogisticRegression</span><span class="p">(</span><span class="n">max_iter</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span> <span class="n">class_weight</span><span class="o">=</span><span class="s1">'balanced'</span><span class="p">)</span>
+            <span class="n">clf_lr</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X_tr_vec</span><span class="p">,</span> <span class="n">y_tr</span><span class="p">)</span>
+            <span class="n">model_preds</span><span class="p">[</span><span class="s1">'TF-IDF+LR'</span><span class="p">]</span> <span class="o">=</span> <span class="n">clf_lr</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">X_te_vec</span><span class="p">)</span>
+
+    <span class="c1"># --------------------------------------------------------</span>
+    <span class="c1"># Train Transformer Models (Quick 1-epoch for error analysis)</span>
+    <span class="c1"># --------------------------------------------------------</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_transformer_preds</span><span class="p">(</span><span class="n">model_name</span><span class="p">,</span> <span class="n">X_tr</span><span class="p">,</span> <span class="n">y_tr</span><span class="p">,</span> <span class="n">X_te</span><span class="p">,</span> <span class="n">y_te</span><span class="p">,</span> <span class="n">n_labels</span><span class="p">):</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"   🔄 Fine-tuning </span><span class="si">{</span><span class="n">model_name</span><span class="si">}</span><span class="s2"> for predictions (1 epoch)..."</span><span class="p">)</span>
+        <span class="n">tok_name</span> <span class="o">=</span> <span class="s2">"distilbert-base-uncased"</span> <span class="k">if</span> <span class="s2">"distil"</span> <span class="ow">in</span> <span class="n">model_name</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="k">else</span> <span class="s2">"roberta-base"</span>
+        <span class="n">tok</span> <span class="o">=</span> <span class="n">AutoTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="n">tok_name</span><span class="p">)</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">tokenize</span><span class="p">(</span><span class="n">batch</span><span class="p">):</span> <span class="k">return</span> <span class="n">tok</span><span class="p">(</span><span class="n">batch</span><span class="p">[</span><span class="s2">"text"</span><span class="p">],</span> <span class="n">truncation</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">padding</span><span class="o">=</span><span class="s2">"max_length"</span><span class="p">,</span> <span class="n">max_length</span><span class="o">=</span><span class="mi">128</span><span class="p">)</span>
+        <span class="n">train_ds</span> <span class="o">=</span> <span class="n">Dataset</span><span class="o">.</span><span class="n">from_dict</span><span class="p">({</span><span class="s2">"text"</span><span class="p">:</span> <span class="n">X_tr</span><span class="p">,</span> <span class="s2">"label"</span><span class="p">:</span> <span class="n">y_tr</span><span class="p">})</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">tokenize</span><span class="p">,</span> <span class="n">batched</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">test_ds</span> <span class="o">=</span> <span class="n">Dataset</span><span class="o">.</span><span class="n">from_dict</span><span class="p">({</span><span class="s2">"text"</span><span class="p">:</span> <span class="n">X_te</span><span class="p">,</span> <span class="s2">"label"</span><span class="p">:</span> <span class="n">y_te</span><span class="p">})</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">tokenize</span><span class="p">,</span> <span class="n">batched</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        
+        <span class="n">model</span> <span class="o">=</span> <span class="n">AutoModelForSequenceClassification</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span>
+            <span class="n">tok_name</span><span class="p">,</span> <span class="n">num_labels</span><span class="o">=</span><span class="n">n_labels</span><span class="p">,</span> 
+            <span class="n">id2label</span><span class="o">=</span><span class="p">{</span><span class="n">i</span><span class="p">:</span><span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_labels</span><span class="p">)},</span>
+            <span class="n">label2id</span><span class="o">=</span><span class="p">{</span><span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">):</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_labels</span><span class="p">)}</span>
+        <span class="p">)</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="n">TrainingArguments</span><span class="p">(</span>
+            <span class="n">output_dir</span><span class="o">=</span><span class="sa">f</span><span class="s2">"./tmp_</span><span class="si">{</span><span class="n">model_name</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">'/'</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2">_err"</span><span class="p">,</span> <span class="n">learning_rate</span><span class="o">=</span><span class="mf">2e-5</span><span class="p">,</span>
+            <span class="n">per_device_train_batch_size</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">num_train_epochs</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">weight_decay</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span>
+            <span class="n">eval_strategy</span><span class="o">=</span><span class="s2">"no"</span><span class="p">,</span> <span class="n">logging_steps</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span> <span class="n">disable_tqdm</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">report_to</span><span class="o">=</span><span class="s2">"none"</span><span class="p">,</span> <span class="n">fp16</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">log_level</span><span class="o">=</span><span class="s2">"error"</span>
+        <span class="p">)</span>
+        <span class="n">trainer</span> <span class="o">=</span> <span class="n">Trainer</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="n">args</span><span class="p">,</span> <span class="n">train_dataset</span><span class="o">=</span><span class="n">train_ds</span><span class="p">)</span>
+        <span class="n">trainer</span><span class="o">.</span><span class="n">train</span><span class="p">()</span>
+        <span class="n">preds</span> <span class="o">=</span> <span class="n">trainer</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">test_ds</span><span class="p">)</span><span class="o">.</span><span class="n">predictions</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">preds</span><span class="p">,</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="s1">'DistilBERT'</span> <span class="ow">in</span> <span class="p">[</span><span class="n">cfg</span><span class="p">[</span><span class="s1">'best'</span><span class="p">],</span> <span class="n">cfg</span><span class="p">[</span><span class="s1">'worst'</span><span class="p">]]:</span>
+        <span class="n">model_preds</span><span class="p">[</span><span class="s1">'DistilBERT'</span><span class="p">]</span> <span class="o">=</span> <span class="n">get_transformer_preds</span><span class="p">(</span><span class="s1">'distilbert'</span><span class="p">,</span> <span class="n">X_tr</span><span class="p">,</span> <span class="n">y_tr</span><span class="p">,</span> <span class="n">X_te</span><span class="p">,</span> <span class="n">y_te</span><span class="p">,</span> <span class="n">n_labels</span><span class="p">)</span>
+    <span class="k">if</span> <span class="s1">'RoBERTa'</span> <span class="ow">in</span> <span class="p">[</span><span class="n">cfg</span><span class="p">[</span><span class="s1">'best'</span><span class="p">],</span> <span class="n">cfg</span><span class="p">[</span><span class="s1">'worst'</span><span class="p">]]:</span>
+        <span class="n">model_preds</span><span class="p">[</span><span class="s1">'RoBERTa'</span><span class="p">]</span> <span class="o">=</span> <span class="n">get_transformer_preds</span><span class="p">(</span><span class="s1">'roberta'</span><span class="p">,</span> <span class="n">X_tr</span><span class="p">,</span> <span class="n">y_tr</span><span class="p">,</span> <span class="n">X_te</span><span class="p">,</span> <span class="n">y_te</span><span class="p">,</span> <span class="n">n_labels</span><span class="p">)</span>
+
+    <span class="c1"># --------------------------------------------------------</span>
+    <span class="c1"># Extract 25 Misclassified Examples per Model</span>
+    <span class="c1"># --------------------------------------------------------</span>
+    <span class="n">errors</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">m_name</span><span class="p">,</span> <span class="n">preds</span> <span class="ow">in</span> <span class="n">model_preds</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="n">err_indices</span> <span class="o">=</span> <span class="p">[</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">y_te</span><span class="p">))</span> <span class="k">if</span> <span class="n">y_te</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">!=</span> <span class="n">preds</span><span class="p">[</span><span class="n">i</span><span class="p">]]</span>
+        <span class="n">sample_idx</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">err_indices</span><span class="p">,</span> <span class="nb">min</span><span class="p">(</span><span class="mi">25</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">err_indices</span><span class="p">)))</span>
+        <span class="c1"># Store 4-tuples</span>
+        <span class="n">errors</span><span class="p">[</span><span class="n">m_name</span><span class="p">]</span> <span class="o">=</span> <span class="p">[(</span><span class="n">i</span><span class="p">,</span> <span class="n">X_te</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">y_te</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">preds</span><span class="p">[</span><span class="n">i</span><span class="p">])</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">sample_idx</span><span class="p">]</span>
+        
+    <span class="n">results_data</span><span class="p">[</span><span class="n">ds_name</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s1">'errors'</span><span class="p">:</span> <span class="n">errors</span><span class="p">,</span> <span class="s1">'best'</span><span class="p">:</span> <span class="n">cfg</span><span class="p">[</span><span class="s1">'best'</span><span class="p">],</span> <span class="s1">'worst'</span><span class="p">:</span> <span class="n">cfg</span><span class="p">[</span><span class="s1">'worst'</span><span class="p">]}</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"   ✅ </span><span class="si">{</span><span class="n">ds_name</span><span class="si">}</span><span class="s2">: Extracted </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">errors</span><span class="p">[</span><span class="n">cfg</span><span class="p">[</span><span class="s1">'best'</span><span class="p">]])</span><span class="si">}</span><span class="s2"> best-model errors, </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">errors</span><span class="p">[</span><span class="n">cfg</span><span class="p">[</span><span class="s1">'worst'</span><span class="p">]])</span><span class="si">}</span><span class="s2"> worst-model errors"</span><span class="p">)</span>
+
+<span class="c1"># ============================================================</span>
+<span class="c1"># 2️⃣ Categorize &amp; Analyze Overlap</span>
+<span class="c1"># ============================================================</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"</span><span class="se">\n</span><span class="s2">"</span> <span class="o">+</span> <span class="s2">"="</span><span class="o">*</span><span class="mi">90</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"📋 ERROR CATEGORIZATION &amp; OVERLAP ANALYSIS (Copy to Report)"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"="</span><span class="o">*</span><span class="mi">90</span><span class="p">)</span>
+
+<span class="n">report_text</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="n">all_tables</span> <span class="o">=</span> <span class="p">[]</span>
+
+<span class="k">for</span> <span class="n">ds_name</span><span class="p">,</span> <span class="n">data</span> <span class="ow">in</span> <span class="n">results_data</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="n">best_name</span><span class="p">,</span> <span class="n">worst_name</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s1">'best'</span><span class="p">],</span> <span class="n">data</span><span class="p">[</span><span class="s1">'worst'</span><span class="p">]</span>
+    <span class="n">best_errs</span><span class="p">,</span> <span class="n">worst_errs</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s1">'errors'</span><span class="p">][</span><span class="n">best_name</span><span class="p">],</span> <span class="n">data</span><span class="p">[</span><span class="s1">'errors'</span><span class="p">][</span><span class="n">worst_name</span><span class="p">]</span>
+    
+    <span class="c1"># Categorize</span>
+    <span class="n">best_cats</span> <span class="o">=</span> <span class="p">[(</span><span class="n">idx</span><span class="p">,</span> <span class="n">text</span><span class="p">,</span> <span class="n">true</span><span class="p">,</span> <span class="n">pred</span><span class="p">,</span> <span class="n">categorize_failure</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">true</span><span class="p">,</span> <span class="n">pred</span><span class="p">))</span> <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">text</span><span class="p">,</span> <span class="n">true</span><span class="p">,</span> <span class="n">pred</span> <span class="ow">in</span> <span class="n">best_errs</span><span class="p">]</span>
+    <span class="n">worst_cats</span> <span class="o">=</span> <span class="p">[(</span><span class="n">idx</span><span class="p">,</span> <span class="n">text</span><span class="p">,</span> <span class="n">true</span><span class="p">,</span> <span class="n">pred</span><span class="p">,</span> <span class="n">categorize_failure</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">true</span><span class="p">,</span> <span class="n">pred</span><span class="p">))</span> <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">text</span><span class="p">,</span> <span class="n">true</span><span class="p">,</span> <span class="n">pred</span> <span class="ow">in</span> <span class="n">worst_errs</span><span class="p">]</span>
+    
+    <span class="c1"># Compute Overlap</span>
+    <span class="n">best_idx_set</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">e</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">best_errs</span><span class="p">)</span>
+    <span class="n">worst_idx_set</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">e</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">worst_errs</span><span class="p">)</span>
+    <span class="n">overlap_indices</span> <span class="o">=</span> <span class="n">best_idx_set</span> <span class="o">&amp;</span> <span class="n">worst_idx_set</span>
+    <span class="n">overlap_pct</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">overlap_indices</span><span class="p">)</span> <span class="o">/</span> <span class="nb">min</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">best_idx_set</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="n">worst_idx_set</span><span class="p">))</span> <span class="o">*</span> <span class="mi">100</span>
+    
+    <span class="c1"># Table</span>
+    <span class="n">df_best</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">best_cats</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s1">'idx'</span><span class="p">,</span> <span class="s1">'text'</span><span class="p">,</span> <span class="s1">'true'</span><span class="p">,</span> <span class="s1">'pred'</span><span class="p">,</span> <span class="s1">'category'</span><span class="p">])</span>
+    <span class="n">df_worst</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">worst_cats</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s1">'idx'</span><span class="p">,</span> <span class="s1">'text'</span><span class="p">,</span> <span class="s1">'true'</span><span class="p">,</span> <span class="s1">'pred'</span><span class="p">,</span> <span class="s1">'category'</span><span class="p">])</span>
+    <span class="n">df_best</span><span class="p">[</span><span class="s1">'model'</span><span class="p">]</span> <span class="o">=</span> <span class="n">best_name</span><span class="p">;</span> <span class="n">df_worst</span><span class="p">[</span><span class="s1">'model'</span><span class="p">]</span> <span class="o">=</span> <span class="n">worst_name</span>
+    <span class="n">df_combined</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">df_best</span><span class="p">,</span> <span class="n">df_worst</span><span class="p">],</span> <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">all_tables</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">df_combined</span><span class="p">)</span>
+    
+    <span class="c1"># Category Distribution</span>
+    <span class="n">cat_dist_best</span> <span class="o">=</span> <span class="n">df_best</span><span class="p">[</span><span class="s1">'category'</span><span class="p">]</span><span class="o">.</span><span class="n">value_counts</span><span class="p">(</span><span class="n">normalize</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+    <span class="n">cat_dist_worst</span> <span class="o">=</span> <span class="n">df_worst</span><span class="p">[</span><span class="s1">'category'</span><span class="p">]</span><span class="o">.</span><span class="n">value_counts</span><span class="p">(</span><span class="n">normalize</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+    
+    <span class="n">report_text</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="s2">🔹 </span><span class="si">{</span><span class="n">ds_name</span><span class="si">}</span><span class="s2"> Error Analysis:"</span><span class="p">)</span>
+    <span class="n">report_text</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">"   • Best Model (</span><span class="si">{</span><span class="n">best_name</span><span class="si">}</span><span class="s2">) Top Failures: </span><span class="si">{</span><span class="s1">', '</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="sa">f</span><span class="s1">'</span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s1"> (</span><span class="si">{</span><span class="n">v</span><span class="si">:</span><span class="s1">.0%</span><span class="si">}</span><span class="s1">)'</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">k</span><span class="p">,</span><span class="n">v</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">cat_dist_best</span><span class="o">.</span><span class="n">items</span><span class="p">()])</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="n">report_text</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">"   • Worst Model (</span><span class="si">{</span><span class="n">worst_name</span><span class="si">}</span><span class="s2">) Top Failures: </span><span class="si">{</span><span class="s1">', '</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="sa">f</span><span class="s1">'</span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s1"> (</span><span class="si">{</span><span class="n">v</span><span class="si">:</span><span class="s1">.0%</span><span class="si">}</span><span class="s1">)'</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">k</span><span class="p">,</span><span class="n">v</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">cat_dist_worst</span><span class="o">.</span><span class="n">items</span><span class="p">()])</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="n">report_text</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">"   • Error Overlap: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">overlap_indices</span><span class="p">)</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">best_idx_set</span><span class="p">)</span><span class="si">}</span><span class="s2"> examples misclassified by BOTH models (</span><span class="si">{</span><span class="n">overlap_pct</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2">%)"</span><span class="p">)</span>
+    <span class="n">report_text</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">""</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s1">'</span><span class="se">\n</span><span class="s1">'</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">report_text</span><span class="p">))</span>
+
+<span class="c1"># ✅ FIXED: Print 5 representative examples per model (unpacks 4, computes cat inline)</span>
+<span class="k">for</span> <span class="n">ds_name</span><span class="p">,</span> <span class="n">data</span> <span class="ow">in</span> <span class="n">results_data</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="s2">📝 </span><span class="si">{</span><span class="n">ds_name</span><span class="si">}</span><span class="s2"> SAMPLE FAILURES (25 total extracted, showing top 5 per model):"</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">m_name</span> <span class="ow">in</span> <span class="p">[</span><span class="n">data</span><span class="p">[</span><span class="s1">'best'</span><span class="p">],</span> <span class="n">data</span><span class="p">[</span><span class="s1">'worst'</span><span class="p">]]:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"   ▶ </span><span class="si">{</span><span class="n">m_name</span><span class="si">}</span><span class="s2">:"</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">text</span><span class="p">,</span> <span class="n">true</span><span class="p">,</span> <span class="n">pred</span> <span class="ow">in</span> <span class="n">data</span><span class="p">[</span><span class="s1">'errors'</span><span class="p">][</span><span class="n">m_name</span><span class="p">][:</span><span class="mi">5</span><span class="p">]:</span>
+            <span class="n">cat</span> <span class="o">=</span> <span class="n">categorize_failure</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">true</span><span class="p">,</span> <span class="n">pred</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"      • '</span><span class="si">{</span><span class="n">text</span><span class="p">[:</span><span class="mi">75</span><span class="p">]</span><span class="si">}</span><span class="s2">...' | True:</span><span class="si">{</span><span class="n">true</span><span class="si">}</span><span class="s2"> Pred:</span><span class="si">{</span><span class="n">pred</span><span class="si">}</span><span class="s2"> | [</span><span class="si">{</span><span class="n">cat</span><span class="si">}</span><span class="s2">]"</span><span class="p">)</span>
+
+<span class="c1"># 💾 Save to CSV</span>
+<span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">all_tables</span><span class="p">)</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="s1">'results/error_analysis_detailed.csv'</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"</span><span class="se">\n</span><span class="s2">✅ Detailed error tables saved to results/error_analysis_detailed.csv"</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>🔍 Error Analysis: Best vs Worst Models per Dataset
+
+📊 Processing 20NG...
+   🔄 Fine-tuning distilbert for predictions (1 epoch)...
+</pre>
+</div>
+</div>
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="application/vnd.jupyter.stderr" tabindex="0">
+<pre>Map: 100%|██████████| 2442/2442 [00:00&lt;00:00, 7266.30 examples/s]
+Map: 100%|██████████| 306/306 [00:00&lt;00:00, 9422.36 examples/s]
+Loading weights: 100%|██████████| 100/100 [00:00&lt;00:00, 7108.75it/s]
+</pre>
+</div>
+</div>
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>{'loss': '2.931', 'grad_norm': '5.567', 'learning_rate': '1.68e-05', 'epoch': '0.1634'}
+{'loss': '2.772', 'grad_norm': '5.013', 'learning_rate': '1.353e-05', 'epoch': '0.3268'}
+{'loss': '2.558', 'grad_norm': '5.503', 'learning_rate': '1.026e-05', 'epoch': '0.4902'}
+{'loss': '2.413', 'grad_norm': '5.577', 'learning_rate': '6.993e-06', 'epoch': '0.6536'}
+{'loss': '2.286', 'grad_norm': '5.965', 'learning_rate': '3.725e-06', 'epoch': '0.817'}
+{'loss': '2.275', 'grad_norm': '7.133', 'learning_rate': '4.575e-07', 'epoch': '0.9804'}
+</pre>
+</div>
+</div>
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="application/vnd.jupyter.stderr" tabindex="0">
+<pre>Writing model shards: 100%|██████████| 1/1 [00:00&lt;00:00,  4.27it/s]
+</pre>
+</div>
+</div>
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>{'train_runtime': '58.21', 'train_samples_per_second': '41.95', 'train_steps_per_second': '5.257', 'train_loss': '2.537', 'epoch': '1'}
+   ✅ 20NG: Extracted 25 best-model errors, 25 worst-model errors
+
+📊 Processing TweetEval...
+   🔄 Fine-tuning roberta for predictions (1 epoch)...
+</pre>
+</div>
+</div>
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="application/vnd.jupyter.stderr" tabindex="0">
+<pre>Map: 100%|██████████| 3680/3680 [00:00&lt;00:00, 34886.49 examples/s]
+Map: 100%|██████████| 461/461 [00:00&lt;00:00, 25599.74 examples/s]
+Loading weights: 100%|██████████| 197/197 [00:00&lt;00:00, 9367.59it/s]
+</pre>
+</div>
+</div>
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>{'loss': '0.6832', 'grad_norm': '8.575', 'learning_rate': '1.787e-05', 'epoch': '0.1087'}
+{'loss': '0.6716', 'grad_norm': '10.42', 'learning_rate': '1.57e-05', 'epoch': '0.2174'}
+{'loss': '0.6708', 'grad_norm': '7.952', 'learning_rate': '1.352e-05', 'epoch': '0.3261'}
+{'loss': '0.6634', 'grad_norm': '11.32', 'learning_rate': '1.135e-05', 'epoch': '0.4348'}
+{'loss': '0.5987', 'grad_norm': '21.86', 'learning_rate': '9.174e-06', 'epoch': '0.5435'}
+{'loss': '0.5617', 'grad_norm': '8.058', 'learning_rate': '7e-06', 'epoch': '0.6522'}
+{'loss': '0.5069', 'grad_norm': '7.395', 'learning_rate': '4.826e-06', 'epoch': '0.7609'}
+{'loss': '0.5632', 'grad_norm': '18.52', 'learning_rate': '2.652e-06', 'epoch': '0.8696'}
+{'loss': '0.5508', 'grad_norm': '22.26', 'learning_rate': '4.783e-07', 'epoch': '0.9783'}
+</pre>
+</div>
+</div>
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="application/vnd.jupyter.stderr" tabindex="0">
+<pre>Writing model shards: 100%|██████████| 1/1 [00:00&lt;00:00,  2.56it/s]
+</pre>
+</div>
+</div>
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>{'train_runtime': '169.7', 'train_samples_per_second': '21.69', 'train_steps_per_second': '2.711', 'train_loss': '0.6057', 'epoch': '1'}
+   ✅ TweetEval: Extracted 25 best-model errors, 25 worst-model errors
+
+==========================================================================================
+📋 ERROR CATEGORIZATION &amp; OVERLAP ANALYSIS (Copy to Report)
+==========================================================================================
+
+🔹 20NG Error Analysis:
+   • Best Model (TF-IDF+SVM) Top Failures: Label Noise / Other (60%), Out-of-Distribution Vocabulary (28%), Short/Uninformative Text (8%), Ambiguous Ground Truth (4%)
+   • Worst Model (DistilBERT) Top Failures: Label Noise / Other (84%), Out-of-Distribution Vocabulary (8%), Sarcasm/Implicit Meaning (8%)
+   • Error Overlap: 2/25 examples misclassified by BOTH models (8%)
+
+
+🔹 TweetEval Error Analysis:
+   • Best Model (RoBERTa) Top Failures: Out-of-Distribution Vocabulary (60%), Label Noise / Other (16%), Ambiguous Ground Truth (12%), Short/Uninformative Text (8%), Sarcasm/Implicit Meaning (4%)
+   • Worst Model (TF-IDF+SVM) Top Failures: Out-of-Distribution Vocabulary (64%), Label Noise / Other (12%), Sarcasm/Implicit Meaning (12%), Ambiguous Ground Truth (8%), Short/Uninformative Text (4%)
+   • Error Overlap: 2/25 examples misclassified by BOTH models (8%)
+
+
+📝 20NG SAMPLE FAILURES (25 total extracted, showing top 5 per model):
+   ▶ TF-IDF+SVM:
+      • 'The U-B PCNIC (also OEMed by IBM for a while) is the only Ethernet card I k...' | True:3 Pred:0 | [Label Noise / Other]
+      • 'My mouse was an older MS serial version I bought second hand in 1990. It wo...' | True:2 Pred:0 | [Label Noise / Other]
+      • 'then do the same with program manager, and see if it's the shell or the app...' | True:2 Pred:0 | [Label Noise / Other]
+      • 'I believe there is a file on the Diamond Bboard that explains how to sort t...' | True:3 Pred:0 | [Label Noise / Other]
+      • 'NOTEBOOK FILE NAME: 03_*_Transient_Response.ma CHAPTER 3: Transient-Respons...' | True:2 Pred:11 | [Label Noise / Other]
+   ▶ DistilBERT:
+      • 'After trying the whole day, I think, with BWC its impossible to take the ad...' | True:2 Pred:11 | [Label Noise / Other]
+      • 'I am annoyed with Datadesk.  I sent them the keyboard in the mail for inspe...' | True:4 Pred:11 | [Label Noise / Other]
+      • '2)     I have another ancient device, this one a tape drive for which the b...' | True:4 Pred:11 | [Label Noise / Other]
+      • 'Lists of resources are in the manual page for xview, and also in the thinni...' | True:5 Pred:11 | [Label Noise / Other]
+      • 'Old pioneer song from the 1850's or so goes as follows: "In a cavern, in a ...' | True:14 Pred:0 | [Label Noise / Other]
+
+📝 TweetEval SAMPLE FAILURES (25 total extracted, showing top 5 per model):
+   ▶ RoBERTa:
+      • 'I already can't wait for Julia to come back....' | True:0 Pred:1 | [Label Noise / Other]
+      • 'Hell has frozen over. Literally. #Texas2015....' | True:0 Pred:1 | [Out-of-Distribution Vocabulary]
+      • '@user this Friday  lit...' | True:0 Pred:1 | [Short/Uninformative Text]
+      • 'I don't know what's worse...the fact that McDonald's is open on Christmas D...' | True:0 Pred:1 | [Label Noise / Other]
+      • 'I really need to get my nails and eyebrows done tomorrow 😁 been slacking on...' | True:0 Pred:1 | [Out-of-Distribution Vocabulary]
+   ▶ TF-IDF+SVM:
+      • 'Cool to know I have people I can talk to when having a shit night....' | True:1 Pred:0 | [Label Noise / Other]
+      • 'Abnormal professor walks in with the finals in a Zoloft bag #irony #psychhu...' | True:1 Pred:0 | [Out-of-Distribution Vocabulary]
+      • 'Hope everyone is having a lovely Marxist Christmas...' | True:1 Pred:0 | [Ambiguous Ground Truth]
+      • 'I hate it when my mind keeps drifting to someone who no longer matters in l...' | True:1 Pred:0 | [Sarcasm/Implicit Meaning]
+      • 'girls put so much effort in dressing nice for school..I'm over here in my o...' | True:1 Pred:0 | [Out-of-Distribution Vocabulary]
+
+✅ Detailed error tables saved to results/error_analysis_detailed.csv
 </pre>
 </div>
 </div>
